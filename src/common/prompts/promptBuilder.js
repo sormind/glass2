@@ -1,4 +1,5 @@
 const { profilePrompts } = require('./promptTemplates.js');
+const promptRepository = require('../repositories/prompts');
 
 function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true) {
     const sections = [promptParts.intro, '\n\n', promptParts.formatRequirements];
@@ -12,11 +13,29 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
     return sections.join('');
 }
 
-function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true) {
+async function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true) {
+    try {
+        // Try to get prompt from database first
+        const dbPrompt = await promptRepository.getPrompt(profile);
+        if (dbPrompt) {
+            return buildSystemPrompt(dbPrompt, customPrompt, googleSearchEnabled);
+        }
+    } catch (error) {
+        console.warn('Failed to load prompt from database, falling back to static templates:', error);
+    }
+    
+    // Fallback to static templates
+    const promptParts = profilePrompts[profile] || profilePrompts.interview;
+    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled);
+}
+
+// Synchronous version for backward compatibility
+function getSystemPromptSync(profile, customPrompt = '', googleSearchEnabled = true) {
     const promptParts = profilePrompts[profile] || profilePrompts.interview;
     return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled);
 }
 
 module.exports = {
     getSystemPrompt,
+    getSystemPromptSync,
 };

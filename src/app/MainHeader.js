@@ -3,6 +3,8 @@ import { html, css, LitElement } from '../assets/lit-core-2.7.4.min.js';
 export class MainHeader extends LitElement {
     static properties = {
         isSessionActive: { type: Boolean, state: true },
+        recordingTime: { type: String, state: true },
+        recordingStartTime: { type: Number, state: true },
     };
 
     static styles = css`
@@ -101,14 +103,14 @@ export class MainHeader extends LitElement {
         .header {
             width: 100%;
             height: 47px;
-            padding: 2px 10px 2px 13px;
+            padding: 2px 30px 2px 15px;
             background: transparent;
-            overflow: hidden;
+            overflow: visible;
             border-radius: 9000px;
             /* backdrop-filter: blur(1px); */
             justify-content: space-between;
             align-items: center;
-            display: inline-flex;
+            display: flex;
             box-sizing: border-box;
             position: relative;
         }
@@ -145,7 +147,7 @@ export class MainHeader extends LitElement {
             background: transparent;
             border-radius: 9000px;
             justify-content: center;
-            width: 78px;
+            min-width: 78px;
             align-items: center;
             gap: 6px;
             display: flex;
@@ -196,9 +198,9 @@ export class MainHeader extends LitElement {
             box-sizing: border-box;
             justify-content: flex-start;
             align-items: center;
-            gap: 9px;
+            gap: 6px;
             display: flex;
-            padding: 0 8px;
+            padding: 0 6px;
             border-radius: 6px;
             transition: background 0.15s ease;
         }
@@ -208,7 +210,11 @@ export class MainHeader extends LitElement {
         }
 
         .ask-action {
-            margin-left: 4px;
+            margin-left: 2px;
+        }
+
+        .chat-action {
+            margin-left: 2px;
         }
 
         .action-button,
@@ -235,7 +241,31 @@ export class MainHeader extends LitElement {
             font-size: 12px;
             font-family: 'Helvetica Neue', sans-serif;
             font-weight: 500; /* Medium */
-            word-wrap: break-word;
+            white-space: nowrap;
+            overflow: visible;
+        }
+
+        .recording-status {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+        }
+        
+        .stop-text {
+            color: white;
+            font-size: 12px;
+            font-family: 'Helvetica Neue', sans-serif;
+            font-weight: 500;
+        }
+        
+        .recording-timer {
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 9px;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-weight: 400;
+            letter-spacing: 0.3px;
+            line-height: 1;
         }
 
         .icon-container {
@@ -246,6 +276,7 @@ export class MainHeader extends LitElement {
         }
 
         .icon-container.ask-icons svg,
+        .icon-container.chat-icons svg,
         .icon-container.showhide-icons svg {
             width: 12px;
             height: 12px;
@@ -353,6 +384,9 @@ export class MainHeader extends LitElement {
         this.hasSlidIn = false;
         this.settingsHideTimer = null;
         this.isSessionActive = false;
+        this.recordingTime = '00:00';
+        this.recordingStartTime = null;
+        this.recordingTimer = null;
         this.animationEndTimer = null;
         this.handleMouseMove = this.handleMouseMove.bind(this);
         this.handleMouseUp = this.handleMouseUp.bind(this);
@@ -499,6 +533,14 @@ export class MainHeader extends LitElement {
             const { ipcRenderer } = window.require('electron');
             this._sessionStateListener = (event, { isActive }) => {
                 this.isSessionActive = isActive;
+                
+                if (isActive) {
+                    // Start recording timer
+                    this.startRecordingTimer();
+                } else {
+                    // Stop recording timer
+                    this.stopRecordingTimer();
+                }
             };
             ipcRenderer.on('session-state-changed', this._sessionStateListener);
         }
@@ -512,6 +554,9 @@ export class MainHeader extends LitElement {
             clearTimeout(this.animationEndTimer);
             this.animationEndTimer = null;
         }
+        
+        // Clean up recording timer
+        this.stopRecordingTimer();
         
         if (window.require) {
             const { ipcRenderer } = window.require('electron');
@@ -528,6 +573,28 @@ export class MainHeader extends LitElement {
         if (window.require) {
             window.require('electron').ipcRenderer.invoke(channel, ...args);
         }
+    }
+
+    startRecordingTimer() {
+        this.recordingStartTime = Date.now();
+        this.recordingTime = '00:00';
+        
+        // Update timer every second
+        this.recordingTimer = setInterval(() => {
+            const elapsed = Date.now() - this.recordingStartTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            this.recordingTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    stopRecordingTimer() {
+        if (this.recordingTimer) {
+            clearInterval(this.recordingTimer);
+            this.recordingTimer = null;
+        }
+        this.recordingTime = '00:00';
+        this.recordingStartTime = null;
     }
 
     showWindow(name, element) {
@@ -575,7 +642,15 @@ export class MainHeader extends LitElement {
                     @click=${() => this.invoke(this.isSessionActive ? 'close-session' : 'toggle-feature', 'listen')}
                 >
                     <div class="action-text">
-                        <div class="action-text-content">${this.isSessionActive ? 'Stop' : 'Listen'}</div>
+                        <div class="action-text-content">
+                            ${this.isSessionActive 
+                                ? html`<div class="recording-status">
+                                    <span class="stop-text">Stop</span>
+                                    <span class="recording-timer">${this.recordingTime}</span>
+                                </div>`
+                                : 'Listen'
+                            }
+                        </div>
                     </div>
                     <div class="listen-icon">
                         ${this.isSessionActive
@@ -595,6 +670,18 @@ export class MainHeader extends LitElement {
                     </div>
                 </button>
 
+                <button 
+                    class="settings-button"
+                    @mouseenter=${(e) => this.showWindow('settings', e.currentTarget)}
+                    @mouseleave=${() => this.hideWindow('settings')}
+                >
+                    <div class="settings-icon">
+                        <svg width="16" height="17" viewBox="0 0 16 17" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M8.0013 3.16406C7.82449 3.16406 7.65492 3.2343 7.5299 3.35932C7.40487 3.48435 7.33464 3.65392 7.33464 3.83073C7.33464 4.00754 7.40487 4.17711 7.5299 4.30213C7.65492 4.42716 7.82449 4.4974 8.0013 4.4974C8.17811 4.4974 8.34768 4.42716 8.47271 4.30213C8.59773 4.17711 8.66797 4.00754 8.66797 3.83073C8.66797 3.65392 8.59773 3.48435 8.47271 3.35932C8.34768 3.2343 8.17811 3.16406 8.0013 3.16406ZM8.0013 7.83073C7.82449 7.83073 7.65492 7.90097 7.5299 8.02599C7.40487 8.15102 7.33464 8.32058 7.33464 8.4974C7.33464 8.67421 7.40487 8.84378 7.5299 8.9688C7.65492 9.09382 7.82449 9.16406 8.0013 9.16406C8.17811 9.16406 8.34768 9.09382 8.47271 8.9688C8.59773 8.84378 8.66797 8.67421 8.66797 8.4974C8.66797 8.32058 8.59773 8.15102 8.47271 8.02599C8.34768 7.90097 8.17811 7.83073 8.0013 7.83073ZM8.0013 12.4974C7.82449 12.4974 7.65492 12.5676 7.5299 12.6927C7.40487 12.8177 7.33464 12.9873 7.33464 13.1641C7.33464 13.3409 7.40487 13.5104 7.5299 13.6355C7.65492 13.7605 7.82449 13.8307 8.0013 13.8307C8.17811 13.8307 8.34768 13.7605 8.47271 13.6355C8.59773 13.5104 8.66797 13.3409 8.66797 13.1641C8.66797 12.9873 8.59773 8.8177 8.47271 12.6927C8.34768 12.5676 8.17811 12.4974 8.0013 12.4974Z" fill="white" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                </button>
+
                 <div class="header-actions ask-action" @click=${() => this.invoke('toggle-feature', 'ask')}>
                     <div class="action-text">
                         <div class="action-text-content">Ask</div>
@@ -605,6 +692,20 @@ export class MainHeader extends LitElement {
                             <svg viewBox="0 0 15 14" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path fill-rule="evenodd" clip-rule="evenodd" d="M2.41797 8.16406C2.41797 8.00935 2.47943 7.86098 2.58882 7.75158C2.69822 7.64219 2.84659 7.58073 3.0013 7.58073H10.0013C10.4654 7.58073 10.9106 7.39636 11.2387 7.06817C11.5669 6.73998 11.7513 6.29486 11.7513 5.83073V3.4974C11.7513 3.34269 11.8128 3.19431 11.9222 3.08492C12.0316 2.97552 12.1799 2.91406 12.3346 2.91406C12.4893 2.91406 12.6377 2.97552 12.7471 3.08492C12.8565 3.19431 12.918 3.34269 12.918 3.4974V5.83073C12.918 6.60428 12.6107 7.34614 12.0637 7.89312C11.5167 8.44011 10.7748 8.7474 10.0013 8.7474H3.0013C2.84659 8.7474 2.69822 8.68594 2.58882 8.57654C2.47943 8.46715 2.41797 8.31877 2.41797 8.16406Z" fill="white"/>
                                 <path fill-rule="evenodd" clip-rule="evenodd" d="M2.58876 8.57973C2.4794 8.47034 2.41797 8.32199 2.41797 8.16731C2.41797 8.01263 2.4794 7.86429 2.58876 7.75489L4.92209 5.42156C5.03211 5.3153 5.17946 5.25651 5.33241 5.25783C5.48536 5.25916 5.63167 5.32051 5.73982 5.42867C5.84798 5.53682 5.90932 5.68313 5.91065 5.83608C5.91198 5.98903 5.85319 6.13638 5.74693 6.24639L3.82601 8.16731L5.74693 10.0882C5.80264 10.142 5.84708 10.2064 5.87765 10.2776C5.90823 10.3487 5.92432 10.4253 5.92499 10.5027C5.92566 10.5802 5.9109 10.657 5.88157 10.7287C5.85224 10.8004 5.80893 10.8655 5.75416 10.9203C5.69939 10.9751 5.63426 11.0184 5.56257 11.0477C5.49088 11.077 5.41406 11.0918 5.33661 11.0911C5.25916 11.0905 5.18261 11.0744 5.11144 11.0438C5.04027 11.0132 4.9759 10.9688 4.92209 10.9131L2.58876 8.57973Z" fill="white"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="header-actions chat-action" @click=${() => this.invoke('toggle-feature', 'chat')}>
+                    <div class="action-text">
+                        <div class="action-text-content">Chat</div>
+                    </div>
+                    <div class="icon-container chat-icons">
+                        <div class="icon-box">⌘</div>
+                        <div class="icon-box">
+                            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M14 2H2C1.45 2 1 2.45 1 3V11C1 11.55 1.45 12 2 12H4V15L8 12H14C14.55 12 15 11.55 15 11V3C15 2.45 14.55 2 14 2ZM13 10H7.5L5 12V10H3V4H13V10Z" fill="white"/>
                             </svg>
                         </div>
                     </div>
@@ -623,18 +724,6 @@ export class MainHeader extends LitElement {
                         </div>
                     </div>
                 </div>
-
-                <button 
-                    class="settings-button"
-                    @mouseenter=${(e) => this.showWindow('settings', e.currentTarget)}
-                    @mouseleave=${() => this.hideWindow('settings')}
-                >
-                    <div class="settings-icon">
-                        <svg width="16" height="17" viewBox="0 0 16 17" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M8.0013 3.16406C7.82449 3.16406 7.65492 3.2343 7.5299 3.35932C7.40487 3.48435 7.33464 3.65392 7.33464 3.83073C7.33464 4.00754 7.40487 4.17711 7.5299 4.30213C7.65492 4.42716 7.82449 4.4974 8.0013 4.4974C8.17811 4.4974 8.34768 4.42716 8.47271 4.30213C8.59773 4.17711 8.66797 4.00754 8.66797 3.83073C8.66797 3.65392 8.59773 3.48435 8.47271 3.35932C8.34768 3.2343 8.17811 3.16406 8.0013 3.16406ZM8.0013 7.83073C7.82449 7.83073 7.65492 7.90097 7.5299 8.02599C7.40487 8.15102 7.33464 8.32058 7.33464 8.4974C7.33464 8.67421 7.40487 8.84378 7.5299 8.9688C7.65492 9.09382 7.82449 9.16406 8.0013 9.16406C8.17811 9.16406 8.34768 9.09382 8.47271 8.9688C8.59773 8.84378 8.66797 8.67421 8.66797 8.4974C8.66797 8.32058 8.59773 8.15102 8.47271 8.02599C8.34768 7.90097 8.17811 7.83073 8.0013 7.83073ZM8.0013 12.4974C7.82449 12.4974 7.65492 12.5676 7.5299 12.6927C7.40487 12.8177 7.33464 12.9873 7.33464 13.1641C7.33464 13.3409 7.40487 13.5104 7.5299 13.6355C7.65492 13.7605 7.82449 13.8307 8.0013 13.8307C8.17811 13.8307 8.34768 13.7605 8.47271 13.6355C8.59773 13.5104 8.66797 13.3409 8.66797 13.1641C8.66797 12.9873 8.59773 12.8177 8.47271 12.6927C8.34768 12.5676 8.17811 12.4974 8.0013 12.4974Z" fill="white" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                </button>
             </div>
         `;
     }

@@ -1,6 +1,7 @@
 import './MainHeader.js';
 import './ApiKeyHeader.js';
 import './PermissionHeader.js';
+import '../features/meeting-detection/MeetingPrompt.js';
 
 class HeaderTransitionManager {
     constructor() {

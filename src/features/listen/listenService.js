@@ -46,7 +46,8 @@ class ListenService {
     }
 
     async handleTranscriptionComplete(speaker, text) {
-        console.log(`[ListenService] Transcription complete: ${speaker} - ${text}`);
+        console.log(`[ListenService] 📝 Transcription complete: ${speaker} - ${text}`);
+        console.log(`[ListenService] 💾 Current session ID: ${this.currentSessionId}`);
         
         // Save to database
         await this.saveConversationTurn(speaker, text);
@@ -56,22 +57,27 @@ class ListenService {
     }
 
     async saveConversationTurn(speaker, transcription) {
+        console.log(`[DB] 💾 Attempting to save transcript - Session: ${this.currentSessionId}, Speaker: ${speaker}, Text: "${transcription}"`);
+        
         if (!this.currentSessionId) {
-            console.error('[DB] Cannot save turn, no active session ID.');
+            console.error('[DB] ❌ Cannot save turn, no active session ID.');
             return;
         }
-        if (transcription.trim() === '') return;
+        if (transcription.trim() === '') {
+            console.log('[DB] ⚠️ Skipping empty transcript');
+            return;
+        }
 
         try {
             await sessionRepository.touch(this.currentSessionId);
-            await sttRepository.addTranscript({
+            const result = await sttRepository.addTranscript({
                 sessionId: this.currentSessionId,
                 speaker: speaker,
                 text: transcription.trim(),
             });
-            console.log(`[DB] Saved transcript for session ${this.currentSessionId}: (${speaker})`);
+            console.log(`[DB] ✅ Successfully saved transcript for session ${this.currentSessionId}: (${speaker}) - ID: ${result.id}`);
         } catch (error) {
-            console.error('Failed to save transcript to DB:', error);
+            console.error('[DB] ❌ Failed to save transcript to DB:', error);
         }
     }
 
@@ -83,7 +89,8 @@ class ListenService {
             }
             
             this.currentSessionId = await sessionRepository.getOrCreateActive(uid, 'listen');
-            console.log(`[DB] New listen session ensured: ${this.currentSessionId}`);
+            console.log(`[DB] 🆕 New listen session ensured: ${this.currentSessionId}`);
+            console.log(`[DB] 👤 User ID: ${uid}`);
 
             // Set session ID for summary service
             this.summaryService.setSessionId(this.currentSessionId);
@@ -157,13 +164,17 @@ class ListenService {
 
     async closeSession() {
         try {
+            console.log(`[DB] 🔄 Closing session: ${this.currentSessionId}`);
+            
             // Close STT sessions
             await this.sttService.closeSessions();
 
             // End database session
             if (this.currentSessionId) {
                 await sessionRepository.end(this.currentSessionId);
-                console.log(`[DB] Session ${this.currentSessionId} ended.`);
+                console.log(`[DB] ✅ Session ${this.currentSessionId} ended successfully.`);
+            } else {
+                console.log(`[DB] ⚠️ No active session to close.`);
             }
 
             // Reset state
@@ -173,10 +184,10 @@ class ListenService {
             this.sendToRenderer('session-state-changed', { isActive: false });
             this.sendToRenderer('session-did-close');
 
-            console.log('Listen service session closed.');
+            console.log('✅ Listen service session closed successfully.');
             return { success: true };
         } catch (error) {
-            console.error('Error closing listen service session:', error);
+            console.error('❌ Error closing listen service session:', error);
             return { success: false, error: error.message };
         }
     }

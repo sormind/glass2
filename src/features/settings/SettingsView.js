@@ -1,4 +1,5 @@
 import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
+import '../prompts/PromptEditor.js';
 
 export class SettingsView extends LitElement {
     static styles = css`
@@ -410,6 +411,7 @@ export class SettingsView extends LitElement {
         selectedPreset: { type: Object, state: true },
         showPresets: { type: Boolean, state: true },
         saving: { type: Boolean, state: true },
+        showPromptEditor: { type: Boolean, state: true },
     };
 
     constructor() {
@@ -423,6 +425,7 @@ export class SettingsView extends LitElement {
         this.selectedPreset = null;
         this.showPresets = false;
         this.saving = false;
+        this.showPromptEditor = false;
         this.loadInitialData();
     }
 
@@ -606,6 +609,10 @@ export class SettingsView extends LitElement {
         this.showPresets = !this.showPresets;
     }
 
+    togglePromptEditor() {
+        this.showPromptEditor = !this.showPromptEditor;
+    }
+
     async handlePresetSelect(preset) {
         this.selectedPreset = preset;
         // Here you could implement preset application logic
@@ -784,6 +791,23 @@ export class SettingsView extends LitElement {
                                 ${this.selectedPreset?.id === preset.id ? html`<span class="preset-status">Selected</span>` : ''}
                             </div>
                         `)}
+                    </div>
+                </div>
+
+                <!-- Prompt Management Section -->
+                <div class="preset-section">
+                    <div class="preset-header">
+                        <span class="preset-title">
+                            Prompt Templates
+                            <span class="preset-count">✏️</span>
+                        </span>
+                        <span class="preset-toggle" @click=${this.togglePromptEditor}>
+                            ${this.showPromptEditor ? '▼' : '▶'}
+                        </span>
+                    </div>
+                    
+                    <div class="preset-list ${this.showPromptEditor ? '' : 'hidden'}">
+                        <prompt-editor></prompt-editor>
                     </div>
                 </div>
 

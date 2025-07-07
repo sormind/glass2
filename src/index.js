@@ -23,8 +23,11 @@ const fetch = require('node-fetch');
 const { autoUpdater } = require('electron-updater');
 const { EventEmitter } = require('events');
 const askService = require('./features/ask/askService');
+const chatService = require('./features/chat/chatService');
 const settingsService = require('./features/settings/settingsService');
 const sessionRepository = require('./common/repositories/session');
+const MeetingDetectionService = require('./features/meeting-detection/meetingDetectionService');
+const promptService = require('./features/prompts/promptService');
 
 const eventBridge = new EventEmitter();
 let WEB_PORT = 3000;
@@ -32,6 +35,9 @@ let WEB_PORT = 3000;
 const listenService = new ListenService();
 // Make listenService globally accessible so other modules (e.g., windowManager, askService) can reuse the same instance
 global.listenService = listenService;
+
+const meetingDetectionService = new MeetingDetectionService();
+global.meetingDetectionService = meetingDetectionService;
 
 // Native deep link handling - cross-platform compatible
 let pendingDeepLinkUrl = null;
@@ -188,6 +194,10 @@ app.whenReady().then(async () => {
         askService.initialize();
         settingsService.initialize();
         setupGeneralIpcHandlers();
+        
+        // Start meeting detection
+        meetingDetectionService.startMonitoring();
+        console.log('>>> [index.js] Meeting detection service started');
 
         // Start web server and create windows ONLY after all initializations are successful
         WEB_PORT = await startWebStack();

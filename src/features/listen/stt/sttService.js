@@ -26,6 +26,12 @@ class SttService {
         // System audio capture
         this.systemAudioProc = null;
         
+        // Speaker identification
+        this.detectedSpeakers = new Map(); // Map of speaker patterns to names
+        this.myName = 'Me';
+        this.theirName = 'Them';
+        this.lastScreenContent = '';
+        
         // Callbacks
         this.onTranscriptionComplete = null;
         this.onStatusUpdate = null;
@@ -34,6 +40,101 @@ class SttService {
     setCallbacks({ onTranscriptionComplete, onStatusUpdate }) {
         this.onTranscriptionComplete = onTranscriptionComplete;
         this.onStatusUpdate = onStatusUpdate;
+    }
+    
+    // Speaker name detection methods
+    async detectSpeakerNames() {
+        try {
+            // Get screen content from active meeting windows
+            const screenContent = await this.getScreenContent();
+            if (screenContent !== this.lastScreenContent) {
+                this.lastScreenContent = screenContent;
+                this.analyzeSpeakerNames(screenContent);
+            }
+        } catch (error) {
+            console.error('[SttService] Error detecting speaker names:', error);
+        }
+    }
+    
+    async getScreenContent() {
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            
+            // Get window titles and content from meeting apps
+            const { stdout } = await execAsync(`
+                osascript -e '
+                tell application "System Events"
+                    set windowList to {}
+                    repeat with proc in (every process whose background only is false)
+                        try
+                            set procName to name of proc
+                            if procName contains "zoom" or procName contains "Meet" or procName contains "Teams" or procName contains "Discord" or procName contains "Slack" then
+                                repeat with win in (every window of proc)
+                                    try
+                                        set windowTitle to name of win
+                                        set end of windowList to (procName & ": " & windowTitle)
+                                    end try
+                                end repeat
+                            end if
+                        end try
+                    end repeat
+                    return windowList as string
+                end tell'
+            `);
+            return stdout.trim();
+        } catch (error) {
+            console.error('[SttService] Error getting screen content:', error);
+            return '';
+        }
+    }
+    
+    analyzeSpeakerNames(screenContent) {
+        // Common name patterns in meeting apps
+        const namePatterns = [
+            // Zoom patterns: "John Smith", "John Smith (Host)", "John Smith (You)"
+            /([A-Z][a-z]+ [A-Z][a-z]+)(?:\s*\([^)]*\))?/g,
+            // Teams patterns: "John Smith - Presenter"
+            /([A-Z][a-z]+ [A-Z][a-z]+)(?:\s*-\s*[^,]+)?/g,
+            // Discord patterns: "John#1234"
+            /([A-Z][a-z]+)#\d{4}/g,
+            // General patterns: "Speaking: John Smith"
+            /(?:Speaking|Talking|Presenter):\s*([A-Z][a-z]+ [A-Z][a-z]+)/gi
+        ];
+        
+        const detectedNames = new Set();
+        
+        for (const pattern of namePatterns) {
+            let match;
+            while ((match = pattern.exec(screenContent)) !== null) {
+                const name = match[1].trim();
+                if (name && name.length > 2 && !name.includes('You') && !name.includes('Host')) {
+                    detectedNames.add(name);
+                }
+            }
+        }
+        
+        // Update speaker names if we found any
+        if (detectedNames.size > 0) {
+            const names = Array.from(detectedNames);
+            console.log('[SttService] 📝 Detected speaker names:', names);
+            
+            // Assume first detected name is "them" if we don't have it yet
+            if (this.theirName === 'Them' && names.length > 0) {
+                this.theirName = names[0];
+                console.log(`[SttService] 👥 Updated "Them" to: ${this.theirName}`);
+            }
+            
+            // Store all detected names for future reference
+            names.forEach(name => {
+                this.detectedSpeakers.set(name.toLowerCase(), name);
+            });
+        }
+    }
+    
+    getSpeakerName(isMe) {
+        return isMe ? this.myName : this.theirName;
     }
 
     async getApiKey() {
@@ -78,12 +179,12 @@ class SttService {
         
         // Notify completion callback
         if (this.onTranscriptionComplete) {
-            this.onTranscriptionComplete('Me', finalText);
+            this.onTranscriptionComplete(this.getSpeakerName(true), finalText);
         }
         
         // Send to renderer as final
         this.sendToRenderer('stt-update', {
-            speaker: 'Me',
+            speaker: this.getSpeakerName(true),
             text: finalText,
             isPartial: false,
             isFinal: true,
@@ -106,12 +207,12 @@ class SttService {
         
         // Notify completion callback
         if (this.onTranscriptionComplete) {
-            this.onTranscriptionComplete('Them', finalText);
+            this.onTranscriptionComplete(this.getSpeakerName(false), finalText);
         }
         
         // Send to renderer as final
         this.sendToRenderer('stt-update', {
-            speaker: 'Them',
+            speaker: this.getSpeakerName(false),
             text: finalText,
             isPartial: false,
             isFinal: true,
@@ -185,7 +286,7 @@ class SttService {
                     const continuousText = this.myCompletionBuffer + (this.myCompletionBuffer ? ' ' : '') + this.myCurrentUtterance;
                     if (text && !text.includes('vq_lbr_audio_')) {
                         this.sendToRenderer('stt-update', {
-                            speaker: 'Me',
+                            speaker: this.getSpeakerName(true),
                             text: continuousText,
                             isPartial: true,
                             isFinal: false,

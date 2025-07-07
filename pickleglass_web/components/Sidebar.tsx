@@ -187,6 +187,13 @@ const SidebarComponent = ({ isCollapsed, onToggle, onSearchClick }: SidebarProps
                 ariaLabel: 'View my activity',
             },
             {
+                name: 'Chat',
+                href: '/chat',
+                icon: '/chat.svg',
+                isLucide: false,
+                ariaLabel: 'Open chat interface',
+            },
+            {
                 name: 'Personalize',
                 href: '/personalize',
                 icon: '/book.svg',

@@ -37,7 +37,7 @@ async function sendMessage(userPrompt) {
         const conversationHistoryRaw = getConversationHistory();
         const conversationHistory = formatConversationForPrompt(conversationHistoryRaw);
 
-        const systemPrompt = getSystemPrompt('pickle_glass_analysis', conversationHistory, false);
+        const systemPrompt = await getSystemPrompt('pickle_glass_analysis', conversationHistory, false);
 
         const API_KEY = await getStoredApiKey();
         if (!API_KEY) {

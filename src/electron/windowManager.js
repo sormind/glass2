@@ -40,7 +40,7 @@ let currentDisplayId = null;
 let mouseEventsIgnored = false;
 let lastVisibleWindows = new Set(['header']);
 const HEADER_HEIGHT = 47;
-const DEFAULT_WINDOW_WIDTH = 353;
+const DEFAULT_WINDOW_WIDTH = 420;
 
 let currentHeaderState = 'apikey';
 const windowPool = new Map();
@@ -62,7 +62,7 @@ let movementManager = null;
 
 let storedProvider = 'openai';
 
-const featureWindows = ['listen','ask','settings'];
+const featureWindows = ['listen','ask','chat','settings'];
 function isAllowed(name) {
     if (name === 'header') return true;
     return featureWindows.includes(name) && currentHeaderState === 'main';
@@ -153,6 +153,40 @@ function createFeatureWindows(header) {
         ask.webContents.openDevTools({ mode: 'detach' });
     }
     windowPool.set('ask', ask);
+
+    // chat
+    const chat = new BrowserWindow({ ...commonChildOptions, width:800, height:600, resizable: true });
+    chat.setContentProtection(isContentProtectionOn);
+    chat.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
+    if (process.platform === 'darwin') {
+        chat.setWindowButtonVisibility(false);
+    }
+    const chatLoadOptions = { query: { view: 'chat' } };
+    if (!shouldUseLiquidGlass) {
+        chat.loadFile(path.join(__dirname, '../app/content.html'), chatLoadOptions);
+    }
+    else {
+        chatLoadOptions.query.glass = 'true';
+        chat.loadFile(path.join(__dirname, '../app/content.html'), chatLoadOptions);
+        chat.webContents.once('did-finish-load', () => {
+            const viewId = liquidGlass.addView(chat.getNativeWindowHandle(), {
+                cornerRadius: 12,
+                tintColor: '#FF00001A', // Red tint
+                opaque: false, 
+            });
+            if (viewId !== -1) {
+                liquidGlass.unstable_setVariant(viewId, 2);
+            }
+        });
+    }
+
+    chat.on('blur',()=>chat.webContents.send('window-blur'));
+    
+    // Open DevTools in development
+    if (!app.isPackaged) {
+        chat.webContents.openDevTools({ mode: 'detach' });
+    }
+    windowPool.set('chat', chat);
 
     // settings
     const settings = new BrowserWindow({ ...commonChildOptions, width:240, maxHeight:400, parent:undefined });
@@ -311,7 +345,7 @@ function createWindows() {
         alwaysOnTop: true,
         skipTaskbar: true,
         hiddenInMissionControl: true,
-        resizable: false,
+        resizable: true,
         focusable: true,
         acceptFirstMouse: true,
         webPreferences: {
